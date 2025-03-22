@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Summaries - Multilingual Summarizer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #ff6f61, #d4a5a5, #6b5b95);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 800px;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6f61;
+        }
+        .summary {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e0f7fa;
+            border-left: 5px solid #00acc1;
+            border-radius: 5px;
+        }
+        a {
+            color: #6b5b95;
+            text-decoration: none;
+        }
+        a:hover {
+            color: #ff6f61;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>My Summaries</h1>
+        <p><a href="{{ url_for('index') }}">Back to Home</a></p>
+        {% if summaries %}
+            {% for summary in summaries %}
+                <div class="summary">
+                    <h3>Summary ({{ summary.language }}) - {{ summary.created_at }}</h3>
+                    <p>{{ summary.summary }}</p>
+                    <p><a href="{{ url_for('export_summary', summary_id=summary.id) }}">Export as PDF</a></p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No summaries found.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

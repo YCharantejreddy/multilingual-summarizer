@@ -1,0 +1,371 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multilingual Summarizer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #ff6f61, #d4a5a5, #6b5b95);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            animation: fadeIn 1s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(-20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            text-align: center;
+            color: #ff6f61;
+            margin-bottom: 20px;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        @keyframes slideIn {
+            0% { transform: translateX(-50px); opacity: 0; }
+            100% { transform: translateX(0); opacity: 1; }
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: #6b5b95;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: #ff6f61;
+            transform: scale(1.1);
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        label {
+            font-weight: bold;
+            color: #333;
+            animation: fadeIn 1.2s ease-in-out;
+        }
+
+        select, textarea, input[type="file"] {
+            padding: 10px;
+            border: 2px solid #d4a5a5;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        select:focus, textarea:focus, input[type="file"]:focus {
+            border-color: #ff6f61;
+            box-shadow: 0 0 8px rgba(255, 111, 97, 0.3);
+            outline: none;
+        }
+
+        button {
+            background: #6b5b95;
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+            animation: bounceIn 0.5s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            60% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        button:hover {
+            background: #ff6f61;
+            transform: translateY(-3px);
+        }
+
+        .summary, .error {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            animation: fadeIn 0.8s ease-in-out;
+        }
+
+        .summary {
+            background: #e0f7fa;
+            border-left: 5px solid #00acc1;
+        }
+
+        .error {
+            background: #ffebee;
+            border-left: 5px solid #d32f2f;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Multilingual Summarizer</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Home</a>
+            <a href="{{ url_for('about') }}">About</a>
+            <a href="{{ url_for('testcases') }}">Test Cases</a>
+            <a href="{{ url_for('analyze') }}">Analyze</a>
+        </div>
+        <form method="POST" action="{{ url_for('summarize') }}" enctype="multipart/form-data">
+            <label for="input_type">Select Input Type:</label>
+            <select name="input_type" id="input_type" onchange="toggleInput()">
+                <option value="text">Text</option>
+                <option value="youtube">YouTube URL</option>
+                <option value="pdf">PDF File</option>
+            </select>
+
+            <div id="text_input">
+                <label for="text">Enter Text:</label>
+                <textarea name="text" id="text" rows="5" placeholder="Enter text to summarize..."></textarea>
+            </div>
+
+            <div id="youtube_input" class="hidden">
+                <label for="youtube_url">Enter YouTube URL:</label>
+                <textarea name="youtube_url" id="youtube_url" rows="1" placeholder="Enter YouTube URL..."></textarea>
+            </div>
+
+            <div id="pdf_input" class="hidden">
+                <label for="pdf_file">Upload PDF:</label>
+                <input type="file" name="pdf_file" id="pdf_file" accept=".pdf">
+            </div>
+
+            <label for="language">Select Language:</label>
+            <select name="language" id="language">
+                <option value="en_XX">English</option>
+                <option value="es_XX">Spanish</option>
+                <option value="fr_XX">French</option>
+                <option value="de_XX">German</option>
+                <option value="zh_XX">Chinese</option>
+            </select>
+
+            <button type="submit">Summarize</button>
+        </form>
+
+        {% if summary %}
+        <div class="summary">
+            <h2>Summary:</h2>
+            <p>{{ summary }}</p>
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="error">
+            <h2>Error:</h2>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function toggleInput() {
+            const inputType = document.getElementById('input_type').value;
+            document.getElementById('text_input').classList.add('hidden');
+            document.getElementById('youtube_input').classList.add('hidden');
+            document.getElementById('pdf_input').classList.add('hidden');
+
+            if (inputType === 'text') {
+                document.getElementById('text_input').classList.remove('hidden');
+            } else if (inputType === 'youtube') {
+                document.getElementById('youtube_input').classList.remove('hidden');
+            } else if (inputType === 'pdf') {
+                document.getElementById('pdf_input').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html> -->
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multilingual Summarizer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #ff6f61, #d4a5a5, #6b5b95);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 800px;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6f61;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input, textarea, select {
+            padding: 10px;
+            border: 2px solid #d4a5a5;
+            border-radius: 5px;
+        }
+        button {
+            background: #6b5b95;
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #ff6f61;
+        }
+        .message {
+            text-align: center;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e0f7fa;
+            border-left: 5px solid #00acc1;
+            border-radius: 5px;
+        }
+        a {
+            color: #6b5b95;
+            text-decoration: none;
+        }
+        a:hover {
+            color: #ff6f61;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Multilingual Summarizer</h1>
+        <div class="user-status">
+            {% if current_user.is_authenticated %}
+                <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('my_summaries') }}">My Summaries</a> | <a href="{{ url_for('logout') }}">Logout</a></p>
+            {% else %}
+                <p><a href="{{ url_for('login') }}">Login</a> | <a href="{{ url_for('register') }}">Register</a></p>
+            {% endif %}
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% if error %}
+            <div class="message error">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/summarize" enctype="multipart/form-data">
+            <label for="input_type">Input Type:</label>
+            <select name="input_type" id="input_type" onchange="toggleInput()">
+                <option value="text">Text</option>
+                <option value="youtube">YouTube URL</option>
+                <option value="pdf">PDF File</option>
+            </select>
+            <div id="text_input">
+                <label for="text">Text:</label>
+                <textarea name="text" id="text" rows="5"></textarea>
+            </div>
+            <div id="youtube_input" style="display: none;">
+                <label for="youtube_url">YouTube URL:</label>
+                <input type="text" name="youtube_url" id="youtube_url">
+            </div>
+            <div id="pdf_input" style="display: none;">
+                <label for="pdf_file">PDF File:</label>
+                <input type="file" name="pdf_file" id="pdf_file" accept=".pdf">
+            </div>
+            <label for="language">Language:</label>
+            <select name="language" id="language">
+                <option value="en_XX">English</option>
+                <option value="es_XX">Spanish</option>
+                <option value="fr_XX">French</option>
+            </select>
+            <button type="submit">Summarize</button>
+        </form>
+        {% if summary %}
+            <div class="summary">
+                <h2>Summary:</h2>
+                <p>{{ summary }}</p>
+            </div>
+            {% if rouge_scores %}
+                <div class="rouge-scores">
+                    <h2>ROUGE Scores:</h2>
+                    <p>ROUGE-1: Precision: {{ rouge_scores['rouge1'].precision | round(2) }}, Recall: {{ rouge_scores['rouge1'].recall | round(2) }}, F1: {{ rouge_scores['rouge1'].fmeasure | round(2) }}</p>
+                    <p>ROUGE-2: Precision: {{ rouge_scores['rouge2'].precision | round(2) }}, Recall: {{ rouge_scores['rouge2'].recall | round(2) }}, F1: {{ rouge_scores['rouge2'].fmeasure | round(2) }}</p>
+                    <p>ROUGE-L: Precision: {{ rouge_scores['rougeL'].precision | round(2) }}, Recall: {{ rouge_scores['rougeL'].recall | round(2) }}, F1: {{ rouge_scores['rougeL'].fmeasure | round(2) }}</p>
+                </div>
+            {% endif %}
+        {% endif %}
+        <p><a href="{{ url_for('about') }}">About</a> | <a href="{{ url_for('testcases') }}">Test Cases</a> | <a href="{{ url_for('analyze') }}">Analyze</a></p>
+    </div>
+    <script>
+        function toggleInput() {
+            const inputType = document.getElementById('input_type').value;
+            document.getElementById('text_input').style.display = inputType === 'text' ? 'block' : 'none';
+            document.getElementById('youtube_input').style.display = inputType === 'youtube' ? 'block' : 'none';
+            document.getElementById('pdf_input').style.display = inputType === 'pdf' ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Analyze Text or File</title>
+</head>
+<body>
+    <h1>Analyze Text or Upload File</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <label for="rawtext">Enter Text:</label><br>
+        <textarea name="rawtext" rows="10" cols="50"></textarea><br>
+        <label for="language">Language:</label><br>
+        <select name="language">
+            <option value="en_XX">English</option>
+            <option value="hi_IN">Hindi</option>
+            <!-- Add more languages as needed -->
+        </select><br>
+        <label for="file">Or Upload File:</label><br>
+        <input type="file" name="file"><br>
+        <input type="submit" value="Analyze">
+    </form>
+    <a href="/">Back to Home</a>
+</body>
+</html>
