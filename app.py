@@ -1,3 +1,11 @@
+import os
+import logging
+import re
+from datetime import datetime
+from io import BytesIO
+
+import nltk
+from nltk.tokenize import sent_tokenize
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
@@ -6,37 +14,37 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 from youtube_transcript_api import YouTubeTranscriptApi
 import PyPDF2
-import re
-import os
-import logging
-from datetime import datetime
 from rouge_score import rouge_scorer
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from io import BytesIO
-import nltk
-from nltk.tokenize import sent_tokenize
 
-# Download NLTK data for sentence tokenization
-nltk.download('punkt')
-nltk.download('punkt_tab')
+# Download NLTK data and cache it in /tmp for Heroku
+nltk_data_dir = '/tmp/nltk_data'
+os.makedirs(nltk_data_dir, exist_ok=True)
+nltk.data.path.append(nltk_data_dir)
+try:
+    nltk.download('punkt', download_dir=nltk_data_dir)
+    nltk.download('punkt_tab', download_dir=nltk_data_dir)
+    logging.info("NLTK data downloaded successfully")
+except Exception as e:
+    logging.error(f"Error downloading NLTK data: {str(e)}")
 
+# Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')  # Use env var for Azure
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB file size limit
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///summaries.db')  # Use Azure's DATABASE_URL
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///instance/summaries.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB file size limit
 
-# Create uploads directory if it doesn't exist
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+# Replace 'postgres://' with 'postgresql://' for Heroku's DATABASE_URL
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://')
 
-# Set up logging
+# Set up logging to stdout for Heroku
 logging.basicConfig(
     level=logging.INFO,
-    filename='app.log',
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
 )
 
 # Initialize database and bcrypt
@@ -63,16 +71,13 @@ class Summary(db.Model):
     language = db.Column(db.String(10), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
-# Create database tables
-try:
-    with app.app_context():
-        db.create_all()
-    logging.info("Database tables created successfully")
-except Exception as e:
-    logging.error(f"Error creating database tables: {str(e)}")
+# Load user for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-# Load the model and tokenizer directly from Hugging Face
-model_name = "google/pegasus-xsum"  # Switched to a smaller model
+# Load the model and tokenizer (use a smaller model for Heroku)
+model_name = "t5-small"  # Switched to a smaller model for Heroku's free tier
 tokenizer = None
 model = None
 try:
@@ -83,14 +88,9 @@ try:
     logging.info("Model and tokenizer loaded successfully")
 except Exception as e:
     logging.error(f"Error loading model or tokenizer: {str(e)}")
-    print(f"Warning: Could not load model {model_name}. Summarization will not work until the model is loaded.")
+    flash(f"Warning: Could not load model {model_name}. Summarization will not work until the model is loaded.", 'error')
 
-# Load user for Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# Function to preprocess text (remove special tokens like <extra_id_0>)
+# Function to preprocess text
 def preprocess_text(text):
     text = re.sub(r'<extra_id_\d+>', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
@@ -152,7 +152,7 @@ def calculate_rouge(original_text, summary):
         logging.error(f"Error calculating ROUGE scores: {str(e)}")
         return None
 
-# Function to summarize text with improved parameters
+# Function to summarize text
 def summarize_text(text, language="en_XX", max_length=50, min_length=10, num_beams=1, length_penalty=1.0):
     if not model or not tokenizer:
         return None, "Model not loaded. Summarization is unavailable."
@@ -170,8 +170,8 @@ def summarize_text(text, language="en_XX", max_length=50, min_length=10, num_bea
             )
             summary_ids = model.generate(
                 inputs["input_ids"],
-                max_length=max_length // len(chunks),
-                min_length=min_length // len(chunks),
+                max_length=max_length // max(1, len(chunks)),
+                min_length=min_length // max(1, len(chunks)),
                 num_beams=num_beams,
                 length_penalty=length_penalty,
                 early_stopping=True,
@@ -260,8 +260,11 @@ def logout():
     return redirect(url_for('index'))
 
 # Route for summarization
-@app.route('/summarize', methods=['POST'])
+@app.route('/summarize', methods=['GET', 'POST'])
 def summarize():
+    if request.method == 'GET':
+        return redirect(url_for('index'))
+
     input_type = request.form.get('input_type')
     language = request.form.get('language', 'en_XX')
     text = None
@@ -288,27 +291,33 @@ def summarize():
                 text, error = extract_text_from_pdf(pdf_file)
 
     if error or not text:
-        return render_template('index.html', error=error or "Unable to extract text.")
+        flash(error or "Unable to extract text.", 'error')
+        return redirect(url_for('index'))
 
     summary, error = summarize_text(text, language=language)
     if error:
-        return render_template('index.html', error=f"Error during summarization: {error}")
+        flash(f"Error during summarization: {error}", 'error')
+        return redirect(url_for('index'))
 
     # Calculate ROUGE scores
     rouge_scores = calculate_rouge(text, summary)
 
     # Save summary to database if user is logged in
     if current_user.is_authenticated:
-        new_summary = Summary(
-            user_id=current_user.id,
-            original_text=text,
-            summary=summary,
-            language=language
-        )
-        db.session.add(new_summary)
-        db.session.commit()
+        try:
+            new_summary = Summary(
+                user_id=current_user.id,
+                original_text=text,
+                summary=summary,
+                language=language
+            )
+            db.session.add(new_summary)
+            db.session.commit()
+        except Exception as e:
+            logging.error(f"Error saving summary to database: {str(e)}")
+            flash("Summary generated but could not be saved to database.", 'warning')
 
-    return render_template('index.html', summary=summary, rouge_scores=rouge_scores)
+    return render_template('summary.html', original_text=text, summary=summary, rouge_scores=rouge_scores)
 
 # Route to view saved summaries
 @app.route('/my_summaries')
@@ -334,8 +343,13 @@ def export_summary(summary_id):
     p.drawString(100, 710, f"Created At: {summary.created_at}")
     text_object = p.beginText(100, 690)
     text_object.setFont("Helvetica", 12)
+    text_object.textLine("Original Text:")
+    for line in summary.original_text.split('\n')[:10]:  # Limit to 10 lines to avoid overflow
+        text_object.textLine(line[:80])  # Truncate long lines
+    text_object.textLine("")
+    text_object.textLine("Summary:")
     for line in summary.summary.split('\n'):
-        text_object.textLine(line)
+        text_object.textLine(line[:80])
     p.drawText(text_object)
     p.showPage()
     p.save()
@@ -352,9 +366,13 @@ def export_summary(summary_id):
 @login_required
 def api_summarize():
     data = request.json
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
+
     input_type = data.get("input_type")
     language = data.get("language", "en_XX")
     text = data.get("text")
+
     if input_type == "text" and text:
         summary, error = summarize_text(text, language)
         if error:
@@ -382,11 +400,5 @@ def analyze():
     return render_template('analyze.html')
 
 if __name__ == "__main__":
-    try:
-        print("Starting Flask server...")
-        port = int(os.getenv('PORT', 5000))  # Use Azure's PORT env var
-        app.run(debug=False, host='0.0.0.0', port=port)
-        print(f"Server is running on port {port}")
-    except Exception as e:
-        print(f"Error starting Flask server: {str(e)}")
-        logging.error(f"Error starting Flask server: {str(e)}")
+    port = int(os.getenv('PORT', 5000))  # Use Heroku's PORT env var
+    app.run(host='0.0.0.0', port=port)
