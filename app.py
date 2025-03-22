@@ -3,7 +3,8 @@ import logging
 import re
 from datetime import datetime
 from io import BytesIO
-
+import sys
+print(f"Python version: {sys.version}", flush=True)
 import nltk
 from nltk.tokenize import sent_tokenize
 from flask import Flask, render_template, request, redirect, url_for, send_file, jsonify, flash
